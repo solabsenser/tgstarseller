@@ -8,13 +8,15 @@ from aiogram.types import (
 from aiogram.filters import Command
 
 # ===== НАСТРОЙКИ =====
-BOT_TOKEN = "ТВОЙ_ТОКЕН"
-ADMIN_ID = 123456789
-BACKEND_URL = "http://localhost:8080"
-CLICK_PAY_URL = "https://my.click.uz/services/pay"  # ссылка оплаты
-SERVICE_ID = "12345"
-MERCHANT_ID = "12345"
-PRICE_PER_STAR = 300
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = int(os.environ.get("ADMIN_ID"))
+BACKEND_URL = os.environ.get("BACKEND_URL")
+
+CLICK_PAY_URL = os.environ.get("CLICK_PAY_URL")
+SERVICE_ID = os.environ.get("SERVICE_ID")
+MERCHANT_ID = os.environ.get("MERCHANT_ID")
+
+PRICE_PER_STAR = int(os.environ.get("PRICE_PER_STAR", 300))
 # =====================
 
 bot = Bot(token=BOT_TOKEN)
