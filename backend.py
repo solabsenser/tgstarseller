@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import hashlib
 import time
-
+import os
 app = FastAPI()
 
 # ===== НАСТРОЙКИ =====
