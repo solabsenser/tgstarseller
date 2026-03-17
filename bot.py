@@ -20,6 +20,10 @@ MERCHANT_ID = os.environ.get("MERCHANT_ID")
 PRICE_PER_STAR = int(os.environ.get("PRICE_PER_STAR", 300))
 # =====================
 
+# защита от пустых env
+if not BACKEND_URL:
+    raise ValueError("BACKEND_URL не задан")
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
@@ -47,7 +51,7 @@ def stars_menu():
 @dp.message(Command("start"))
 async def start(msg: Message):
     text = (
-        "💎 Добро пожаловать в магазин Stars\n\n"
+        "💎 <b>Магазин Telegram Stars</b>\n\n"
         "⚡ Быстро\n"
         "🔒 Надёжно\n"
         "💰 Выгодно"
@@ -68,7 +72,7 @@ async def get_username(msg: Message):
     await msg.answer("Выбери пакет:", reply_markup=stars_menu())
 
 
-# ===== ВЫБОР ПАКЕТА =====
+# ===== ВЫБОР ПАКЕТА (ПОДТВЕРЖДЕНИЕ) =====
 @dp.callback_query(F.data.startswith("stars_"))
 async def stars(callback):
     amount = int(callback.data.split("_")[1])
@@ -76,31 +80,86 @@ async def stars(callback):
 
     price = amount * PRICE_PER_STAR
 
-    res = requests.post(f"{BACKEND_URL}/order", json={
-        "user_id": callback.from_user.id,
-        "username": username,
-        "amount": amount,
-        "price": price
-    })
+    # сохраняем
+    user_data[callback.from_user.id]["amount"] = amount
+    user_data[callback.from_user.id]["price"] = price
 
-    order_id = res.json()["order_id"]
+    text = (
+        f"💎 <b>Подтверждение заказа</b>\n\n"
+        f"👤 Username: @{username}\n"
+        f"⭐ Stars: {amount}\n"
+        f"💰 Сумма: {price} сум\n\n"
+        f"Выберите способ оплаты:"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Click", callback_data="pay_click")],
+        [InlineKeyboardButton(text="💳 Payme", callback_data="pay_payme")],
+        [InlineKeyboardButton(text="💳 Uzum", callback_data="pay_uzum")]
+    ])
+
+    await callback.message.answer(text, reply_markup=kb)
+
+
+# ===== CLICK =====
+@dp.callback_query(F.data == "pay_click")
+async def pay_click(callback):
+    data = user_data.get(callback.from_user.id)
+
+    if not data:
+        await callback.message.answer("Ошибка данных")
+        return
+
+    try:
+        res = requests.post(f"{BACKEND_URL}/order", json={
+            "user_id": callback.from_user.id,
+            "username": data["username"],
+            "amount": data["amount"],
+            "price": data["price"]
+        })
+
+        if res.status_code != 200:
+            await callback.message.answer("❌ Ошибка сервера")
+            return
+
+        order_id = res.json()["order_id"]
+
+    except Exception:
+        await callback.message.answer("❌ Ошибка подключения")
+        return
 
     pay_url = (
         f"{CLICK_PAY_URL}"
         f"?service_id={SERVICE_ID}"
         f"&merchant_id={MERCHANT_ID}"
-        f"&amount={price}"
+        f"&amount={data['price']}"
         f"&transaction_param={order_id}"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 Оплатить", url=pay_url)],
+        [InlineKeyboardButton(text="💳 Перейти к оплате", url=pay_url)],
         [InlineKeyboardButton(text="🔄 Проверить оплату", callback_data=f"check_{order_id}")]
     ])
 
     await callback.message.answer(
-        f"💰 Сумма: {price} сум\n\nПосле оплаты нажми кнопку ниже",
+        "Нажмите кнопку ниже для оплаты:",
         reply_markup=kb
+    )
+
+
+# ===== PAYME =====
+@dp.callback_query(F.data == "pay_payme")
+async def pay_payme(callback):
+    await callback.message.answer(
+        "💳 Payme\n\nПереведите на карту:\n8600 **** **** 1234\n\nПосле оплаты нажмите 'Проверить'"
+    )
+
+
+# ===== UZUM =====
+@dp.callback_query(F.data == "pay_uzum")
+async def pay_uzum(callback):
+    await callback.message.answer(
+        "💳 Uzum\n\nПереведите по номеру:\n+99890XXXXXXX\n\nПосле оплаты нажмите 'Проверить'"
     )
 
 
@@ -109,9 +168,20 @@ async def stars(callback):
 async def check_payment(callback):
     order_id = int(callback.data.split("_")[1])
 
-    order = requests.get(f"{BACKEND_URL}/order/{order_id}").json()
+    try:
+        res = requests.get(f"{BACKEND_URL}/order/{order_id}")
 
-    if order["status"] != "paid":
+        if res.status_code != 200:
+            await callback.message.answer("❌ Ошибка сервера")
+            return
+
+        order = res.json()
+
+    except:
+        await callback.message.answer("❌ Ошибка подключения")
+        return
+
+    if order.get("status") != "paid":
         await callback.message.answer("❌ Оплата не найдена")
         return
 
@@ -125,7 +195,7 @@ async def check_payment(callback):
     await bot.send_message(
         ADMIN_ID,
         f"""
-💸 Оплата получена!
+💸 ОПЛАТА ПОЛУЧЕНА
 
 @{order['username']}
 {order['amount']} ⭐
@@ -156,6 +226,7 @@ async def decline(callback):
     await callback.message.answer("❌ Отменено")
 
 
+# ===== RUN =====
 async def main():
     await dp.start_polling(bot)
 
