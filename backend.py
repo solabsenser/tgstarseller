@@ -6,8 +6,8 @@ import time
 app = FastAPI()
 
 # ===== НАСТРОЙКИ =====
-CLICK_SECRET_KEY = "TEST_SECRET_KEY"
-CLICK_SERVICE_ID = "12345"
+CLICK_SECRET_KEY = os.environ.get("CLICK_SECRET_KEY")
+CLICK_SERVICE_ID = os.environ.get("SERVICE_ID")
 # =====================
 
 orders = []
